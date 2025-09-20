@@ -6,8 +6,8 @@ import plotly.graph_objects as go
 import os
 
 # ======= Configuración por defecto =======
-CUT_FEED_DEFAULT = 800       # mm/min
-PAUSE_DEFAULT_MS = 500       # milisegundos por mm
+CUT_FEED_DEFAULT = 100       # mm/min
+PAUSE_DEFAULT_MS = 5       # milisegundos por mm
 ARC_SEGMENTS_DEFAULT = 40    # resolución fija para arcos
 paths = []
 ordered_paths = []
@@ -167,15 +167,15 @@ uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 st.write("### Parámetros de corte")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=10, max_value=1000,
-                                value=CUT_FEED_DEFAULT, step=10)
+    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=10, max_value=800,
+                                value=CUT_FEED_DEFAULT, step=5)
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000,
-                                     value=CUT_FEED_DEFAULT, step=1)
+    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=800,
+                                     value=CUT_FEED_DEFAULT, step=5)
 
 cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
-pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000,
-                            value=PAUSE_DEFAULT_MS, step=10)
+pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=200,
+                            value=PAUSE_DEFAULT_MS, step=1)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
@@ -200,7 +200,7 @@ if uploaded_file:
         for (x1, y1), (x2, y2) in preview_segments:
             fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
                                      mode='lines',
-                                     line=dict(color='blue', width=0.2)))
+                                     line=dict(color='blue', width=0.5)))
         fig.update_layout(
             xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
             yaxis=dict(showgrid=True),
