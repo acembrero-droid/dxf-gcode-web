@@ -4,8 +4,8 @@ import math
 import io
 import matplotlib.pyplot as plt
 
-CUT_FEED_DEFAULT = 800
-PAUSE_DEFAULT = 0.5
+CUT_FEED_DEFAULT = 800      # mm/min
+PAUSE_DEFAULT = 0.5         # segundos por mm
 paths = []
 ordered_paths = []
 
@@ -85,18 +85,21 @@ def order_paths():
         start, end = get_entity_points(entity)
         current_pos = end if not reverse else start
 
-# ======= Generar G-code y segmentos para preview =======
+# ======= Generar G-code, preview y tiempo =======
 def generar_gcode(cut_feed, pause_factor):
     order_paths()
     gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
     preview_segments = []
+    total_time = 0.0
     current_x, current_y = None, None
 
-    def move_to(x, y):
-        nonlocal current_x, current_y
-        gcode_lines.append(f"G1 X{x:.3f} Y{y:.3f} F{cut_feed}")
+    def move_to(x, y, feed):
+        nonlocal current_x, current_y, total_time
+        gcode_lines.append(f"G1 X{x:.3f} Y{y:.3f} F{feed}")
         if current_x is not None:
+            dist = distance((current_x, current_y), (x, y))
             preview_segments.append(((current_x, current_y), (x, y)))
+            total_time += (dist / (feed / 60))  # mm / (mm/s)
         current_x, current_y = x, y
 
     def is_close(x1, y1, x2, y2, tol=0.001):
@@ -111,15 +114,15 @@ def generar_gcode(cut_feed, pause_factor):
             ex, ey = entity["end"]
             if rev: sx, sy, ex, ey = ex, ey, sx, sy
             if current_x is None or not is_close(current_x, current_y, sx, sy):
-                move_to(sx, sy)
-            move_to(ex, ey)
+                move_to(sx, sy, cut_feed)
+            move_to(ex, ey, cut_feed)
 
         elif entity["type"] == "polyline":
             points = entity["points"][::-1] if rev else entity["points"]
             if current_x is None or not is_close(current_x, current_y, points[0][0], points[0][1]):
-                move_to(points[0][0], points[0][1])
+                move_to(points[0][0], points[0][1], cut_feed)
             for x, y in points[1:]:
-                move_to(x, y)
+                move_to(x, y, cut_feed)
 
         elif entity["type"] == "arc":
             cx, cy = entity["center"]
@@ -132,11 +135,14 @@ def generar_gcode(cut_feed, pause_factor):
             end_x = cx + r * math.cos(math.radians(end_angle))
             end_y = cy + r * math.sin(math.radians(end_angle))
             if current_x is None or not is_close(current_x, current_y, start_x, start_y):
-                move_to(start_x, start_y)
+                move_to(start_x, start_y, cut_feed)
             ccw = end_angle > start_angle
             i = cx - start_x
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
+            arc_length = length_entity(entity)
+            total_time += (arc_length / (cut_feed / 60))  # tiempo de corte del arco
+            # segmentos para preview
             segments = 40
             for k in range(segments):
                 angle1 = math.radians(start_angle + (end_angle - start_angle) * k / segments)
@@ -146,12 +152,14 @@ def generar_gcode(cut_feed, pause_factor):
                 preview_segments.append(((x1, y1), (x2, y2)))
             current_x, current_y = end_x, end_y
 
-        gcode_lines.append(f"G4 P{pause_factor * entity_len:.3f} ; pausa")
+        pause_time = pause_factor * entity_len
+        gcode_lines.append(f"G4 P{pause_time:.3f} ; pausa")
+        total_time += pause_time
 
-    return gcode_lines, preview_segments
+    return gcode_lines, preview_segments, total_time
 
 # ======= Interfaz Streamlit =======
-st.title("DXF → G-code con Vista Previa")
+st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 cut_feed = st.number_input("Velocidad de corte (mm/min)", value=CUT_FEED_DEFAULT)
@@ -162,11 +170,16 @@ if uploaded_file:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
     if st.button("Generar y Previsualizar G-code"):
-        gcode_lines, preview_segments = generar_gcode(cut_feed, pause_factor)
+        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor)
 
         # Mostrar G-code
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
+
+        # Mostrar tiempo total
+        minutos, segundos = divmod(total_time, 60)
+        st.subheader("⏱ Tiempo estimado de ejecución")
+        st.write(f"**{int(minutos)} min {segundos:.1f} s** (incluyendo pausas)")
 
         # Mostrar Preview en Matplotlib
         st.subheader("🖼 Vista Previa de Trayectoria")
