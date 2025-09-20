@@ -5,8 +5,8 @@ import io
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
-CUT_FEED_DEFAULT = 800      # mm/min
-PAUSE_DEFAULT_MS = 500      # milisegundos por mm
+CUT_FEED_DEFAULT = 100      # mm/min
+PAUSE_DEFAULT_MS = 20      # milisegundos por mm
 ARC_SEGMENTS_DEFAULT = 40   # resolución fija para arcos
 paths = []
 ordered_paths = []
@@ -168,15 +168,15 @@ uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 st.write("### Parámetros de corte")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=10, max_value=1000,
-                                value=CUT_FEED_DEFAULT, step=10)
+    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=10, max_value=800,
+                                value=CUT_FEED_DEFAULT, step=5)
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000,
+    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=800,
                                      value=CUT_FEED_DEFAULT, step=1)
 
 cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
-pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000,
-                            value=PAUSE_DEFAULT_MS, step=10)
+pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=200,
+                            value=PAUSE_DEFAULT_MS, step=1)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
@@ -208,19 +208,19 @@ if uploaded_file:
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Persistencia del nombre de archivo
-        if "nombre_archivo" not in st.session_state:
-            st.session_state["nombre_archivo"] = "output.gcode"
+       # Persistencia del nombre de archivo
+if "nombre_archivo" not in st.session_state:
+    st.session_state.nombre_archivo = "output.gcode"
 
-        st.session_state["nombre_archivo"] = st.text_input(
-            "Nombre del archivo para descargar (con extensión .gcode):",
-            value=st.session_state["nombre_archivo"]
-        )
+st.text_input(
+    "Nombre del archivo para descargar (con extensión .gcode):",
+    key="nombre_archivo"
+)
 
-        output = io.StringIO("\n".join(gcode_lines))
-        st.download_button(
-            "💾 Descargar G-code",
-            data=output.getvalue(),
-            file_name=st.session_state["nombre_archivo"],
-            mime="text/plain"
-        )
+output = io.StringIO("\n".join(gcode_lines))
+st.download_button(
+    "💾 Descargar G-code",
+    data=output.getvalue(),
+    file_name=st.session_state.nombre_archivo,
+    mime="text/plain"
+)
