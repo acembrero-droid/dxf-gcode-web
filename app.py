@@ -5,7 +5,8 @@ import io
 import matplotlib.pyplot as plt
 
 CUT_FEED_DEFAULT = 800      # mm/min
-PAUSE_DEFAULT = 0.5         # segundos por mm
+PAUSE_MS_DEFAULT = 500      # milisegundos por mm
+ARC_SEGMENTS_DEFAULT = 40   # resolución de arco para preview
 paths = []
 ordered_paths = []
 
@@ -85,8 +86,8 @@ def order_paths():
         start, end = get_entity_points(entity)
         current_pos = end if not reverse else start
 
-# ======= Generar G-code, preview y tiempo =======
-def generar_gcode(cut_feed, pause_factor):
+# ======= Generar G-code y preview =======
+def generar_gcode(cut_feed, pause_ms, arc_segments):
     order_paths()
     gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
     preview_segments = []
@@ -99,7 +100,7 @@ def generar_gcode(cut_feed, pause_factor):
         if current_x is not None:
             dist = distance((current_x, current_y), (x, y))
             preview_segments.append(((current_x, current_y), (x, y)))
-            total_time += (dist / (feed / 60))  # mm / (mm/s)
+            total_time += (dist / (feed / 60))
         current_x, current_y = x, y
 
     def is_close(x1, y1, x2, y2, tol=0.001):
@@ -141,21 +142,18 @@ def generar_gcode(cut_feed, pause_factor):
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
             arc_length = length_entity(entity)
-            total_time += (arc_length / (cut_feed / 60))  # tiempo de corte del arco
-            # segmentos para preview
-            segments = 40
-            for k in range(segments):
-                angle1 = math.radians(start_angle + (end_angle - start_angle) * k / segments)
-                angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / segments)
+            total_time += (arc_length / (cut_feed / 60))
+            for k in range(arc_segments):
+                angle1 = math.radians(start_angle + (end_angle - start_angle) * k / arc_segments)
+                angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / arc_segments)
                 x1, y1 = cx + r * math.cos(angle1), cy + r * math.sin(angle1)
                 x2, y2 = cx + r * math.cos(angle2), cy + r * math.sin(angle2)
                 preview_segments.append(((x1, y1), (x2, y2)))
             current_x, current_y = end_x, end_y
 
-        # Pausa en milisegundos
-        pause_ms = int(pause_factor * entity_len * 1000)  # convertir a ms
-        gcode_lines.append(f"G4 P{pause_ms} ; pausa")
-        total_time += pause_ms / 1000  # sumar tiempo en segundos
+        pause = int(pause_ms * entity_len)
+        gcode_lines.append(f"G4 P{pause} ; pausa")
+        total_time += pause / 1000
 
     return gcode_lines, preview_segments, total_time
 
@@ -163,26 +161,21 @@ def generar_gcode(cut_feed, pause_factor):
 st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
-cut_feed = st.number_input("Velocidad de corte (mm/min)", value=CUT_FEED_DEFAULT)
-pause_factor = st.number_input("Pausa (s por mm)", value=PAUSE_DEFAULT, step=0.1)
+
+cut_feed = st.slider("Velocidad de corte (mm/min)", min_value=100, max_value=5000, value=CUT_FEED_DEFAULT, step=50)
+pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000, value=PAUSE_MS_DEFAULT, step=10)
+arc_segments = st.slider("Resolución de arco para vista previa", min_value=5, max_value=200, value=ARC_SEGMENTS_DEFAULT, step=5)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
     if st.button("Generar y Previsualizar G-code"):
-        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor)
+        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms, arc_segments)
 
         # Mostrar G-code
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
-
-        # Tiempo total en HH:MM:SS
-        horas = int(total_time // 3600)
-        minutos = int((total_time % 3600) // 60)
-        segundos = round(total_time % 60)
-        st.subheader("⏱ Tiempo estimado de ejecución")
-        st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
         # Vista previa
         st.subheader("🖼 Vista Previa de Trayectoria")
@@ -193,7 +186,14 @@ if uploaded_file:
         ax.set_title("Trayectoria Generada")
         st.pyplot(fig)
 
-        # Nombre de archivo editable antes de descargar
+        # Tiempo total en HH:MM:SS.dec
+        horas = int(total_time // 3600)
+        minutos = int((total_time % 3600) // 60)
+        segundos = total_time % 60
+        st.subheader("⏱ Tiempo estimado de ejecución")
+        st.write(f"**{horas:02d}:{minutos:02d}:{segundos:04.1f}** (incluyendo pausas)")
+
+        # Descarga editable
         nombre_archivo = st.text_input("Nombre del archivo para descargar (con extensión .gcode):", "output.gcode")
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button(
