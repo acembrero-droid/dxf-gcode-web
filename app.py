@@ -8,7 +8,7 @@ import os
 # ======= Configuración por defecto =======
 CUT_FEED_DEFAULT = 100       # mm/min
 PAUSE_DEFAULT_MS = 50       # milisegundos por mm
-ARC_SEGMENTS_DEFAULT = 80    # resolución fija para arcos
+ARC_SEGMENTS_DEFAULT = 20    # resolución fija para arcos
 paths = []
 ordered_paths = []
 
