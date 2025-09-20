@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from io import BytesIO
 import tempfile
 
-CUT_FEED_DEFAULT = 800
-PAUSE_DEFAULT = 0.5  # segundos por mm de longitud
+CUT_FEED_DEFAULT = 100
+PAUSE_DEFAULT = 0.2  # segundos por mm de longitud
 
 paths = []
 ordered_paths = []
