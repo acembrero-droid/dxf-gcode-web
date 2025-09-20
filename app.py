@@ -164,37 +164,50 @@ st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 
+# ======= Sliders e inputs sincronizados =======
 st.write("### Parámetros de corte")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=5, max_value=800,
-                                value=CUT_FEED_DEFAULT, step=5)
+    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", 5, 800, CUT_FEED_DEFAULT, 5, key="slider_feed")
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=5, max_value=800,
-                                     value=CUT_FEED_DEFAULT, step=5)
+    cut_feed_input = st.number_input("Valor exacto", 5, 800, CUT_FEED_DEFAULT, 1, key="input_feed")
 
-cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
-pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=200,
-                            value=PAUSE_DEFAULT_MS, step=1)
+# Sincronización bidireccional
+if cut_feed_slider != cut_feed_input:
+    if st.session_state.get("last_changed") == "slider":
+        st.session_state["input_feed"] = cut_feed_slider
+    else:
+        st.session_state["slider_feed"] = cut_feed_input
+cut_feed = st.session_state.get("slider_feed", CUT_FEED_DEFAULT)
+st.session_state["last_changed"] = st.session_state.get("last_changed", "slider")
 
+pause_ms = st.slider("Pausa por mm (ms)", 0, 2000, PAUSE_DEFAULT_MS, 10, key="pause_slider")
+pause_input = st.number_input("Valor exacto pausa (ms)", 0, 2000, PAUSE_DEFAULT_MS, 1, key="pause_input")
+if pause_ms != pause_input:
+    if st.session_state.get("last_changed_pause") == "slider":
+        st.session_state["pause_input"] = pause_ms
+    else:
+        st.session_state["pause_slider"] = pause_input
+pause_factor_ms = st.session_state.get("pause_slider", PAUSE_DEFAULT_MS)
+st.session_state["last_changed_pause"] = st.session_state.get("last_changed_pause", "slider")
+
+# ======= Procesar DXF =======
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
 
-    # Inicializar nombre de archivo basado en DXF solo si es nuevo
     base_name = os.path.splitext(uploaded_file.name)[0] + ".gcode"
     if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf") != uploaded_file.name:
         st.session_state["nombre_archivo"] = base_name
         st.session_state["ultimo_dxf"] = uploaded_file.name
 
-    # Campo de texto para nombre: siempre visible, persistente
     st.text_input("Nombre del archivo:", key="nombre_archivo")
 
     if st.button("Generar y Previsualizar G-code"):
         gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
 
-        # Vista previa interactiva
+        # Visualización interactiva
         st.subheader("🖼 Vista Previa de Trayectoria")
         fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
@@ -217,7 +230,7 @@ if uploaded_file:
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Visor de G-code scrollable
+        # Visor de G-code
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
