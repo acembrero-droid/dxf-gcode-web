@@ -200,7 +200,7 @@ if uploaded_file:
         for (x1, y1), (x2, y2) in preview_segments:
             fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
                                      mode='lines',
-                                     line=dict(color='blue', width=0.2)))
+                                     line=dict(color='blue', width=0.8)))
         fig.update_layout(
             xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
             yaxis=dict(showgrid=True),
