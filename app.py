@@ -181,6 +181,7 @@ if uploaded_file:
     with open("temp.dxf", "wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
+
     if st.button("Generar y Previsualizar G-code"):
         gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
 
@@ -207,19 +208,19 @@ if uploaded_file:
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-       # === Persistencia robusta del nombre de archivo (versión final) ===
-if "nombre_archivo" not in st.session_state:
-    st.session_state["nombre_archivo"] = "output.gcode"
+        # Bloque de descarga SOLO si existe G-code
+        if "nombre_archivo" not in st.session_state:
+            st.session_state["nombre_archivo"] = "output.gcode"
 
-st.text_input(
-    "Nombre del archivo para descargar (con extensión .gcode):",
-    key="nombre_archivo"
-)
+        st.text_input(
+            "Nombre del archivo para descargar (con extensión .gcode):",
+            key="nombre_archivo"
+        )
 
-output = io.StringIO("\n".join(gcode_lines))
-st.download_button(
-    "💾 Descargar G-code",
-    data=output.getvalue(),
-    file_name=st.session_state["nombre_archivo"],
-    mime="text/plain"
-)
+        output = io.StringIO("\n".join(gcode_lines))
+        st.download_button(
+            "💾 Descargar G-code",
+            data=output.getvalue(),
+            file_name=st.session_state["nombre_archivo"],
+            mime="text/plain"
+        )
