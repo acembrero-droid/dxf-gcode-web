@@ -162,7 +162,16 @@ st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 
-cut_feed = st.slider("Velocidad de corte (mm/min)", min_value=100, max_value=5000, value=CUT_FEED_DEFAULT, step=50)
+# Velocidad de corte con slider y número exacto
+st.write("Velocidad de corte (mm/min)")
+col1, col2 = st.columns(2)
+with col1:
+    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=10)
+with col2:
+    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
+cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
+
+# Pausa y resolución de arcos
 pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000, value=PAUSE_MS_DEFAULT, step=10)
 arc_segments = st.slider("Resolución de arco para vista previa", min_value=5, max_value=200, value=ARC_SEGMENTS_DEFAULT, step=5)
 
@@ -186,12 +195,12 @@ if uploaded_file:
         ax.set_title("Trayectoria Generada")
         st.pyplot(fig)
 
-        # Tiempo total en HH:MM:SS.dec
+        # Tiempo total en HH:MM:SS redondeando segundos
         horas = int(total_time // 3600)
         minutos = int((total_time % 3600) // 60)
-        segundos = total_time % 60
+        segundos = int(round(total_time % 60))
         st.subheader("⏱ Tiempo estimado de ejecución")
-        st.write(f"**{horas:02d}:{minutos:02d}:{segundos:04.1f}** (incluyendo pausas)")
+        st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
         # Descarga editable
         nombre_archivo = st.text_input("Nombre del archivo para descargar (con extensión .gcode):", "output.gcode")
