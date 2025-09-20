@@ -2,11 +2,11 @@ import streamlit as st
 import ezdxf
 import math
 import io
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 CUT_FEED_DEFAULT = 800      # mm/min
 PAUSE_MS_DEFAULT = 500      # milisegundos por mm
-ARC_SEGMENTS_DEFAULT = 40   # resolución de arco para preview
+ARC_SEGMENTS_DEFAULT = 40   # resolución de arco fija
 paths = []
 ordered_paths = []
 
@@ -87,7 +87,7 @@ def order_paths():
         current_pos = end if not reverse else start
 
 # ======= Generar G-code y preview =======
-def generar_gcode(cut_feed, pause_ms, arc_segments):
+def generar_gcode(cut_feed, pause_ms):
     order_paths()
     gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
     preview_segments = []
@@ -143,9 +143,9 @@ def generar_gcode(cut_feed, pause_ms, arc_segments):
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
             arc_length = length_entity(entity)
             total_time += (arc_length / (cut_feed / 60))
-            for k in range(arc_segments):
-                angle1 = math.radians(start_angle + (end_angle - start_angle) * k / arc_segments)
-                angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / arc_segments)
+            for k in range(ARC_SEGMENTS_DEFAULT):
+                angle1 = math.radians(start_angle + (end_angle - start_angle) * k / ARC_SEGMENTS_DEFAULT)
+                angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / ARC_SEGMENTS_DEFAULT)
                 x1, y1 = cx + r * math.cos(angle1), cy + r * math.sin(angle1)
                 x2, y2 = cx + r * math.cos(angle2), cy + r * math.sin(angle2)
                 preview_segments.append(((x1, y1), (x2, y2)))
@@ -166,37 +166,41 @@ uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 st.write("Velocidad de corte (mm/min)")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=800, value=CUT_FEED_DEFAULT, step=5)
+    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=10)
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=5, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
+    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
 cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
 
-# Pausa
-pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=200, value=PAUSE_MS_DEFAULT, step=1)
-
+# Pausa por mm
+pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000, value=PAUSE_MS_DEFAULT, step=10)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
     if st.button("Generar y Previsualizar G-code"):
-        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms, arc_segments)
+        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms)
 
         # Mostrar G-code
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
-        # Vista previa
+        # Vista previa interactiva con Plotly
         st.subheader("🖼 Vista Previa de Trayectoria")
-        fig, ax = plt.subplots()
+        fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
-            ax.plot([x1, x2], [y1, y2], 'b-', linewidth=0.2)  # línea más fina
-        ax.set_aspect("equal", "box")
-        ax.set_title("Trayectoria Generada")
-        ax.grid(True)
-
-        # Mostrar la figura con zoom/pan habilitado
-        st.pyplot(fig, use_container_width=True)
+            fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
+                                     mode='lines',
+                                     line=dict(color='blue', width=0.2)))
+        fig.update_layout(
+            xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
+            yaxis=dict(showgrid=True),
+            title="Trayectoria Generada",
+            showlegend=False,
+            width=700,
+            height=700
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
         # Tiempo total en HH:MM:SS redondeando segundos
         horas = int(total_time // 3600)
