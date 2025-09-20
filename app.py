@@ -190,10 +190,13 @@ if uploaded_file:
         st.subheader("🖼 Vista Previa de Trayectoria")
         fig, ax = plt.subplots()
         for (x1, y1), (x2, y2) in preview_segments:
-            ax.plot([x1, x2], [y1, y2], 'b-')
+            ax.plot([x1, x2], [y1, y2], 'b-', linewidth=0.5)  # línea más fina
         ax.set_aspect("equal", "box")
         ax.set_title("Trayectoria Generada")
-        st.pyplot(fig)
+        ax.grid(True)
+
+        # Mostrar la figura con zoom/pan habilitado
+        st.pyplot(fig, use_container_width=True)
 
         # Tiempo total en HH:MM:SS redondeando segundos
         horas = int(total_time // 3600)
