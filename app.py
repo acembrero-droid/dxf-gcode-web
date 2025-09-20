@@ -4,8 +4,8 @@ import math
 import io
 import plotly.graph_objects as go
 
-CUT_FEED_DEFAULT = 800      # mm/min
-PAUSE_MS_DEFAULT = 500      # milisegundos por mm
+CUT_FEED_DEFAULT = 100      # mm/min
+PAUSE_MS_DEFAULT = 50      # milisegundos por mm
 ARC_SEGMENTS_DEFAULT = 40   # resolución de arco fija
 paths = []
 ordered_paths = []
@@ -191,7 +191,7 @@ if uploaded_file:
         for (x1, y1), (x2, y2) in preview_segments:
             fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
                                      mode='lines',
-                                     line=dict(color='blue', width=0.2)))
+                                     line=dict(color='blue', width=0.4)))
         fig.update_layout(
             xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
             yaxis=dict(showgrid=True),
