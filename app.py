@@ -2,11 +2,12 @@ import streamlit as st
 import ezdxf
 import math
 import io
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 
-CUT_FEED_DEFAULT = 100      # mm/min
-PAUSE_MS_DEFAULT = 50      # milisegundos por mm
-ARC_SEGMENTS_DEFAULT = 40   # resolución de arco fija
+CUT_FEED_DEFAULT = 800      # mm/min
+PAUSE_DEFAULT_MS = 500      # milisegundos por mm
+ARC_SEGMENTS_DEFAULT = 40   # resolución fija para arcos
 paths = []
 ordered_paths = []
 
@@ -86,8 +87,8 @@ def order_paths():
         start, end = get_entity_points(entity)
         current_pos = end if not reverse else start
 
-# ======= Generar G-code y preview =======
-def generar_gcode(cut_feed, pause_ms):
+# ======= Generar G-code, preview y tiempo =======
+def generar_gcode(cut_feed, pause_factor_ms):
     order_paths()
     gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
     preview_segments = []
@@ -100,7 +101,7 @@ def generar_gcode(cut_feed, pause_ms):
         if current_x is not None:
             dist = distance((current_x, current_y), (x, y))
             preview_segments.append(((current_x, current_y), (x, y)))
-            total_time += (dist / (feed / 60))
+            total_time += (dist / (feed / 60))  # tiempo de corte
         current_x, current_y = x, y
 
     def is_close(x1, y1, x2, y2, tol=0.001):
@@ -142,7 +143,8 @@ def generar_gcode(cut_feed, pause_ms):
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
             arc_length = length_entity(entity)
-            total_time += (arc_length / (cut_feed / 60))
+            total_time += (arc_length / (cut_feed / 60))  # tiempo de corte
+            # segmentos para preview
             for k in range(ARC_SEGMENTS_DEFAULT):
                 angle1 = math.radians(start_angle + (end_angle - start_angle) * k / ARC_SEGMENTS_DEFAULT)
                 angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / ARC_SEGMENTS_DEFAULT)
@@ -151,9 +153,10 @@ def generar_gcode(cut_feed, pause_ms):
                 preview_segments.append(((x1, y1), (x2, y2)))
             current_x, current_y = end_x, end_y
 
-        pause = int(pause_ms * entity_len)
-        gcode_lines.append(f"G4 P{pause} ; pausa")
-        total_time += pause / 1000
+        # Pausa convertida a segundos
+        pause_time = (pause_factor_ms / 1000.0) * entity_len
+        gcode_lines.append(f"G4 P{pause_time:.3f} ; pausa")
+        total_time += pause_time
 
     return gcode_lines, preview_segments, total_time
 
@@ -162,28 +165,25 @@ st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 
-# Velocidad de corte con slider y número exacto
-st.write("Velocidad de corte (mm/min)")
+st.write("### Parámetros de corte")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=10)
+    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", min_value=10, max_value=1000,
+                                value=CUT_FEED_DEFAULT, step=10)
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
-cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
+    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000,
+                                     value=CUT_FEED_DEFAULT, step=1)
 
-# Pausa por mm
-pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=1600, value=PAUSE_MS_DEFAULT, step=5)
+cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
+pause_factor_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000,
+                            value=PAUSE_DEFAULT_MS, step=10)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
     if st.button("Generar y Previsualizar G-code"):
-        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms)
-
-        # Mostrar G-code
-        st.subheader("📄 G-code Generado")
-        st.text_area("G-code", "\n".join(gcode_lines), height=300)
+        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
 
         # Vista previa interactiva con Plotly
         st.subheader("🖼 Vista Previa de Trayectoria")
@@ -191,30 +191,36 @@ if uploaded_file:
         for (x1, y1), (x2, y2) in preview_segments:
             fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
                                      mode='lines',
-                                     line=dict(color='blue', width=0.4)))
+                                     line=dict(color='blue', width=0.2)))
         fig.update_layout(
             xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
             yaxis=dict(showgrid=True),
             title="Trayectoria Generada",
             showlegend=False,
-            width=700,
             height=700
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Tiempo total en HH:MM:SS redondeando segundos
+        # Mostrar tiempo total
         horas = int(total_time // 3600)
         minutos = int((total_time % 3600) // 60)
-        segundos = int(round(total_time % 60))
+        segundos = round(total_time % 60)
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Descarga editable
-        nombre_archivo = st.text_input("Nombre del archivo para descargar (con extensión .gcode):", "output.gcode")
+        # Persistencia del nombre de archivo
+        if "nombre_archivo" not in st.session_state:
+            st.session_state["nombre_archivo"] = "output.gcode"
+
+        st.session_state["nombre_archivo"] = st.text_input(
+            "Nombre del archivo para descargar (con extensión .gcode):",
+            value=st.session_state["nombre_archivo"]
+        )
+
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button(
             "💾 Descargar G-code",
             data=output.getvalue(),
-            file_name=nombre_archivo,
+            file_name=st.session_state["nombre_archivo"],
             mime="text/plain"
         )
