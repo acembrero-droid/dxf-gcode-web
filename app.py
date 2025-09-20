@@ -166,14 +166,14 @@ uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 st.write("Velocidad de corte (mm/min)")
 col1, col2 = st.columns(2)
 with col1:
-    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=10)
+    cut_feed_slider = st.slider("Ajuste visual", min_value=10, max_value=800, value=CUT_FEED_DEFAULT, step=5)
 with col2:
-    cut_feed_input = st.number_input("Valor exacto", min_value=10, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
+    cut_feed_input = st.number_input("Valor exacto", min_value=5, max_value=1000, value=CUT_FEED_DEFAULT, step=1)
 cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
 
-# Pausa y resolución de arcos
-pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000, value=PAUSE_MS_DEFAULT, step=10)
-arc_segments = st.slider("Resolución de arco para vista previa", min_value=5, max_value=200, value=ARC_SEGMENTS_DEFAULT, step=5)
+# Pausa
+pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=200, value=PAUSE_MS_DEFAULT, step=1)
+
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
@@ -190,7 +190,7 @@ if uploaded_file:
         st.subheader("🖼 Vista Previa de Trayectoria")
         fig, ax = plt.subplots()
         for (x1, y1), (x2, y2) in preview_segments:
-            ax.plot([x1, x2], [y1, y2], 'b-', linewidth=0.5)  # línea más fina
+            ax.plot([x1, x2], [y1, y2], 'b-', linewidth=0.2)  # línea más fina
         ax.set_aspect("equal", "box")
         ax.set_title("Trayectoria Generada")
         ax.grid(True)
