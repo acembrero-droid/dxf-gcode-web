@@ -152,9 +152,10 @@ def generar_gcode(cut_feed, pause_factor):
                 preview_segments.append(((x1, y1), (x2, y2)))
             current_x, current_y = end_x, end_y
 
-        pause_time = pause_factor * entity_len
-        gcode_lines.append(f"G4 P{pause_time:.3f} ; pausa")
-        total_time += pause_time
+        # Pausa en milisegundos
+        pause_ms = int(pause_factor * entity_len * 1000)  # convertir a ms
+        gcode_lines.append(f"G4 P{pause_ms} ; pausa")
+        total_time += pause_ms / 1000  # sumar tiempo en segundos
 
     return gcode_lines, preview_segments, total_time
 
@@ -176,14 +177,14 @@ if uploaded_file:
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
-        # Mostrar tiempo total en h:m:s
+        # Tiempo total en HH:MM:SS
         horas = int(total_time // 3600)
         minutos = int((total_time % 3600) // 60)
-        segundos = total_time % 60
+        segundos = round(total_time % 60)
         st.subheader("⏱ Tiempo estimado de ejecución")
-        st.write(f"**{horas}h {minutos}m {segundos:.1f}s** (incluyendo pausas)")
+        st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Mostrar Preview en Matplotlib
+        # Vista previa
         st.subheader("🖼 Vista Previa de Trayectoria")
         fig, ax = plt.subplots()
         for (x1, y1), (x2, y2) in preview_segments:
@@ -192,7 +193,7 @@ if uploaded_file:
         ax.set_title("Trayectoria Generada")
         st.pyplot(fig)
 
-        # Pedir nombre de archivo antes de descargar
+        # Nombre de archivo editable antes de descargar
         nombre_archivo = st.text_input("Nombre del archivo para descargar (con extensión .gcode):", "output.gcode")
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button(
