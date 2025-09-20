@@ -5,9 +5,10 @@ import io
 import plotly.graph_objects as go
 import os
 
-CUT_FEED_DEFAULT = 800      # mm/min
-PAUSE_DEFAULT_MS = 500      # milisegundos por mm
-ARC_SEGMENTS_DEFAULT = 40   # resolución fija para arcos
+# ======= Configuración por defecto =======
+CUT_FEED_DEFAULT = 800       # mm/min
+PAUSE_DEFAULT_MS = 500       # milisegundos por mm
+ARC_SEGMENTS_DEFAULT = 40    # resolución fija para arcos
 paths = []
 ordered_paths = []
 
@@ -181,11 +182,14 @@ if uploaded_file:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
 
-    # Inicializar nombre del archivo basado en el DXF solo si es un DXF nuevo
+    # Inicializar nombre de archivo basado en DXF solo si es nuevo
     base_name = os.path.splitext(uploaded_file.name)[0] + ".gcode"
     if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf") != uploaded_file.name:
         st.session_state["nombre_archivo"] = base_name
         st.session_state["ultimo_dxf"] = uploaded_file.name
+
+    # Campo de texto para nombre: siempre visible, persistente
+    st.text_input("Nombre del archivo:", key="nombre_archivo")
 
     if st.button("Generar y Previsualizar G-code"):
         gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
@@ -206,15 +210,12 @@ if uploaded_file:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Mostrar tiempo total
+        # Tiempo estimado
         horas = int(total_time // 3600)
         minutos = int((total_time % 3600) // 60)
         segundos = round(total_time % 60)
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
-
-        # Nombre editable persistente
-        st.text_input("Nombre del archivo:", key="nombre_archivo")
 
         # Botón de descarga
         output = io.StringIO("\n".join(gcode_lines))
