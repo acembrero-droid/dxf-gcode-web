@@ -172,7 +172,7 @@ with col2:
 cut_feed = cut_feed_input if cut_feed_input != CUT_FEED_DEFAULT else cut_feed_slider
 
 # Pausa por mm
-pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=2000, value=PAUSE_MS_DEFAULT, step=10)
+pause_ms = st.slider("Pausa por mm (ms)", min_value=0, max_value=1600, value=PAUSE_MS_DEFAULT, step=5)
 
 if uploaded_file:
     with open("temp.dxf", "wb") as f:
