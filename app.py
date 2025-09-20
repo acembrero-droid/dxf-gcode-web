@@ -3,6 +3,7 @@ import ezdxf
 import math
 import io
 import plotly.graph_objects as go
+import os
 
 CUT_FEED_DEFAULT = 800      # mm/min
 PAUSE_DEFAULT_MS = 500      # milisegundos por mm
@@ -143,7 +144,6 @@ def generar_gcode(cut_feed, pause_factor_ms):
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
             arc_length = length_entity(entity)
             total_time += (arc_length / (cut_feed / 60))
-            # segmentos para preview
             for k in range(ARC_SEGMENTS_DEFAULT):
                 angle1 = math.radians(start_angle + (end_angle - start_angle) * k / ARC_SEGMENTS_DEFAULT)
                 angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / ARC_SEGMENTS_DEFAULT)
@@ -152,7 +152,6 @@ def generar_gcode(cut_feed, pause_factor_ms):
                 preview_segments.append(((x1, y1), (x2, y2)))
             current_x, current_y = end_x, end_y
 
-        # Pausa convertida a segundos
         pause_time = (pause_factor_ms / 1000.0) * entity_len
         gcode_lines.append(f"G4 P{pause_time:.3f} ; pausa")
         total_time += pause_time
@@ -182,10 +181,16 @@ if uploaded_file:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
 
+    # Inicializar nombre del archivo basado en el DXF solo si es un DXF nuevo
+    base_name = os.path.splitext(uploaded_file.name)[0] + ".gcode"
+    if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf") != uploaded_file.name:
+        st.session_state["nombre_archivo"] = base_name
+        st.session_state["ultimo_dxf"] = uploaded_file.name
+
     if st.button("Generar y Previsualizar G-code"):
         gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
 
-        # Vista previa interactiva con Plotly
+        # Vista previa interactiva
         st.subheader("🖼 Vista Previa de Trayectoria")
         fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
@@ -208,15 +213,10 @@ if uploaded_file:
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Bloque de descarga SOLO si existe G-code
-        if "nombre_archivo" not in st.session_state:
-            st.session_state["nombre_archivo"] = "output.gcode"
+        # Nombre editable persistente
+        st.text_input("Nombre del archivo:", key="nombre_archivo")
 
-        st.text_input(
-            "Nombre del archivo para descargar (con extensión .gcode):",
-            key="nombre_archivo"
-        )
-
+        # Botón de descarga
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button(
             "💾 Descargar G-code",
