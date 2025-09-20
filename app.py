@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 import os
 
 # ======= Configuración por defecto =======
-CUT_FEED_DEFAULT = 100       # mm/min
-PAUSE_DEFAULT_MS = 50       # milisegundos por mm
-ARC_SEGMENTS_DEFAULT = 20    # resolución fija para arcos
+CUT_FEED_DEFAULT = 800       # mm/min
+PAUSE_DEFAULT_MS = 500       # ms por mm
+ARC_SEGMENTS_DEFAULT = 40    # resolución fija arcos
 paths = []
 ordered_paths = []
 
@@ -45,7 +45,7 @@ def get_entity_points(entity):
         return start, end
 
 def distance(p1, p2):
-    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+    return math.hypot(p2[0]-p1[0], p2[1]-p1[1])
 
 def length_entity(entity):
     if entity["type"] == "line":
@@ -53,11 +53,11 @@ def length_entity(entity):
     elif entity["type"] == "polyline":
         l = 0
         pts = entity["points"]
-        for i in range(len(pts) - 1):
-            l += distance(pts[i], pts[i + 1])
+        for i in range(len(pts)-1):
+            l += distance(pts[i], pts[i+1])
         return l
     elif entity["type"] == "arc":
-        angle = math.radians(abs(entity["end_angle"] - entity["start_angle"]))
+        angle = math.radians(abs(entity["end_angle"]-entity["start_angle"]))
         return angle * entity["radius"]
 
 def order_paths():
@@ -88,8 +88,8 @@ def order_paths():
         start, end = get_entity_points(entity)
         current_pos = end if not reverse else start
 
-# ======= Generar G-code, preview y tiempo =======
-def generar_gcode(cut_feed, pause_factor_ms):
+# ======= Generar G-code =======
+def generar_gcode(cut_feed, pause_ms):
     order_paths()
     gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
     preview_segments = []
@@ -102,30 +102,27 @@ def generar_gcode(cut_feed, pause_factor_ms):
         if current_x is not None:
             dist = distance((current_x, current_y), (x, y))
             preview_segments.append(((current_x, current_y), (x, y)))
-            total_time += (dist / (feed / 60))  # tiempo de corte
+            total_time += dist / (feed/60)
         current_x, current_y = x, y
 
-    def is_close(x1, y1, x2, y2, tol=0.001):
-        return abs(x1 - x2) < tol and abs(y1 - y2) < tol
-
     for entity in ordered_paths:
-        rev = entity.get('reverse', False)
+        rev = entity.get("reverse", False)
         entity_len = length_entity(entity)
 
         if entity["type"] == "line":
             sx, sy = entity["start"]
             ex, ey = entity["end"]
             if rev: sx, sy, ex, ey = ex, ey, sx, sy
-            if current_x is None or not is_close(current_x, current_y, sx, sy):
+            if current_x is None or distance((current_x, current_y), (sx, sy))>0.001:
                 move_to(sx, sy, cut_feed)
             move_to(ex, ey, cut_feed)
 
         elif entity["type"] == "polyline":
             points = entity["points"][::-1] if rev else entity["points"]
-            if current_x is None or not is_close(current_x, current_y, points[0][0], points[0][1]):
-                move_to(points[0][0], points[0][1], cut_feed)
-            for x, y in points[1:]:
-                move_to(x, y, cut_feed)
+            if current_x is None or distance((current_x, current_y), points[0])>0.001:
+                move_to(*points[0], cut_feed)
+            for pt in points[1:]:
+                move_to(*pt, cut_feed)
 
         elif entity["type"] == "arc":
             cx, cy = entity["center"]
@@ -137,23 +134,23 @@ def generar_gcode(cut_feed, pause_factor_ms):
             start_y = cy + r * math.sin(math.radians(start_angle))
             end_x = cx + r * math.cos(math.radians(end_angle))
             end_y = cy + r * math.sin(math.radians(end_angle))
-            if current_x is None or not is_close(current_x, current_y, start_x, start_y):
+            if current_x is None or distance((current_x, current_y), (start_x, start_y))>0.001:
                 move_to(start_x, start_y, cut_feed)
             ccw = end_angle > start_angle
             i = cx - start_x
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
             arc_length = length_entity(entity)
-            total_time += (arc_length / (cut_feed / 60))
+            total_time += arc_length / (cut_feed/60)
             for k in range(ARC_SEGMENTS_DEFAULT):
-                angle1 = math.radians(start_angle + (end_angle - start_angle) * k / ARC_SEGMENTS_DEFAULT)
-                angle2 = math.radians(start_angle + (end_angle - start_angle) * (k + 1) / ARC_SEGMENTS_DEFAULT)
-                x1, y1 = cx + r * math.cos(angle1), cy + r * math.sin(angle1)
-                x2, y2 = cx + r * math.cos(angle2), cy + r * math.sin(angle2)
-                preview_segments.append(((x1, y1), (x2, y2)))
+                angle1 = math.radians(start_angle + (end_angle-start_angle)*k/ARC_SEGMENTS_DEFAULT)
+                angle2 = math.radians(start_angle + (end_angle-start_angle)*(k+1)/ARC_SEGMENTS_DEFAULT)
+                x1, y1 = cx + r*math.cos(angle1), cy + r*math.sin(angle1)
+                x2, y2 = cx + r*math.cos(angle2), cy + r*math.sin(angle2)
+                preview_segments.append(((x1, y1),(x2,y2)))
             current_x, current_y = end_x, end_y
 
-        pause_time = (pause_factor_ms / 1000.0) * entity_len
+        pause_time = (pause_ms/1000)*entity_len
         gcode_lines.append(f"G4 P{pause_time:.3f} ; pausa")
         total_time += pause_time
 
@@ -164,81 +161,56 @@ st.title("DXF → G-code con Vista Previa y Tiempo Estimado")
 
 uploaded_file = st.file_uploader("Sube tu archivo DXF", type=["dxf"])
 
-# ======= Sliders e inputs sincronizados =======
-st.write("### Parámetros de corte")
-col1, col2 = st.columns(2)
-with col1:
-    cut_feed_slider = st.slider("Velocidad de corte (mm/min)", 5, 800, CUT_FEED_DEFAULT, 5, key="slider_feed")
-with col2:
-    cut_feed_input = st.number_input("Valor exacto", 5, 800, CUT_FEED_DEFAULT, 1, key="input_feed")
-
-# Sincronización bidireccional
-if cut_feed_slider != cut_feed_input:
-    if st.session_state.get("last_changed") == "slider":
-        st.session_state["input_feed"] = cut_feed_slider
-    else:
-        st.session_state["slider_feed"] = cut_feed_input
-cut_feed = st.session_state.get("slider_feed", CUT_FEED_DEFAULT)
-st.session_state["last_changed"] = st.session_state.get("last_changed", "slider")
-
-pause_ms = st.slider("Pausa por mm (ms)", 0, 2000, PAUSE_DEFAULT_MS, 10, key="pause_slider")
-pause_input = st.number_input("Valor exacto pausa (ms)", 0, 2000, PAUSE_DEFAULT_MS, 1, key="pause_input")
-if pause_ms != pause_input:
-    if st.session_state.get("last_changed_pause") == "slider":
-        st.session_state["pause_input"] = pause_ms
-    else:
-        st.session_state["pause_slider"] = pause_input
-pause_factor_ms = st.session_state.get("pause_slider", PAUSE_DEFAULT_MS)
-st.session_state["last_changed_pause"] = st.session_state.get("last_changed_pause", "slider")
-
-# ======= Procesar DXF =======
 if uploaded_file:
-    with open("temp.dxf", "wb") as f:
+    with open("temp.dxf","wb") as f:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
 
-    base_name = os.path.splitext(uploaded_file.name)[0] + ".gcode"
-    if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf") != uploaded_file.name:
+    # Nombre de archivo editable
+    base_name = os.path.splitext(uploaded_file.name)[0]+".gcode"
+    if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf")!=uploaded_file.name:
         st.session_state["nombre_archivo"] = base_name
         st.session_state["ultimo_dxf"] = uploaded_file.name
-
     st.text_input("Nombre del archivo:", key="nombre_archivo")
 
-    if st.button("Generar y Previsualizar G-code"):
-        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_factor_ms)
+    # Parámetros de corte
+    st.write("### Parámetros de corte")
+    col1, col2 = st.columns(2)
+    with col1:
+        cut_feed = st.slider("Velocidad (mm/min)", 10, 1000, CUT_FEED_DEFAULT, 10, key="feed_slider")
+    with col2:
+        cut_feed = st.number_input("Velocidad exacta", 10, 1000, cut_feed, 1, key="feed_input")
 
-        # Visualización interactiva
-        st.subheader("🖼 Vista Previa de Trayectoria")
+    col3, col4 = st.columns(2)
+    with col3:
+        pause_ms = st.slider("Pausa por mm (ms)", 0, 2000, PAUSE_DEFAULT_MS, 10, key="pause_slider")
+    with col4:
+        pause_ms = st.number_input("Pausa exacta (ms)", 0, 2000, pause_ms, 1, key="pause_input")
+
+    # Generar G-code
+    if st.button("Generar y Previsualizar G-code"):
+        gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms)
+
+        # Visualización
+        st.subheader("🖼 Vista Previa")
         fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
-            fig.add_trace(go.Scatter(x=[x1, x2], y=[y1, y2],
-                                     mode='lines',
-                                     line=dict(color='blue', width=0.8)))
-        fig.update_layout(
-            xaxis=dict(scaleanchor="y", scaleratio=1, showgrid=True),
-            yaxis=dict(showgrid=True),
-            title="Trayectoria Generada",
-            showlegend=False,
-            height=700
-        )
+            fig.add_trace(go.Scatter(x=[x1,x2], y=[y1,y2], mode='lines', line=dict(color='blue', width=0.2)))
+        fig.update_layout(xaxis=dict(scaleanchor="y", scaleratio=1), height=700, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
         # Tiempo estimado
-        horas = int(total_time // 3600)
-        minutos = int((total_time % 3600) // 60)
-        segundos = round(total_time % 60)
-        st.subheader("⏱ Tiempo estimado de ejecución")
+        horas = int(total_time//3600)
+        minutos = int((total_time%3600)//60)
+        segundos = round(total_time%60)
+        st.subheader("⏱ Tiempo estimado")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Visor de G-code
-        st.subheader("📄 G-code Generado")
+        # Visor G-code
+        st.subheader("📄 G-code")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
-        # Botón de descarga
+        # Descarga
         output = io.StringIO("\n".join(gcode_lines))
-        st.download_button(
-            "💾 Descargar G-code",
-            data=output.getvalue(),
-            file_name=st.session_state["nombre_archivo"],
-            mime="text/plain"
-        )
+        st.download_button("💾 Descargar G-code", data=output.getvalue(),
+                           file_name=st.session_state["nombre_archivo"], mime="text/plain")
