@@ -207,24 +207,19 @@ if uploaded_file:
         st.subheader("⏱ Tiempo estimado de ejecución")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # === Persistencia robusta del nombre de archivo ===
-        if "nombre_archivo" not in st.session_state:
-            st.session_state.nombre_archivo = "output.gcode"
+       # === Persistencia robusta del nombre de archivo (versión final) ===
+if "nombre_archivo" not in st.session_state:
+    st.session_state["nombre_archivo"] = "output.gcode"
 
-        def actualizar_nombre():
-            st.session_state.nombre_archivo = st.session_state.nombre_archivo_input
+st.text_input(
+    "Nombre del archivo para descargar (con extensión .gcode):",
+    key="nombre_archivo"
+)
 
-        st.text_input(
-            "Nombre del archivo para descargar (con extensión .gcode):",
-            value=st.session_state.nombre_archivo,
-            key="nombre_archivo_input",
-            on_change=actualizar_nombre
-        )
-
-        output = io.StringIO("\n".join(gcode_lines))
-        st.download_button(
-            "💾 Descargar G-code",
-            data=output.getvalue(),
-            file_name=st.session_state.nombre_archivo,
-            mime="text/plain"
-        )
+output = io.StringIO("\n".join(gcode_lines))
+st.download_button(
+    "💾 Descargar G-code",
+    data=output.getvalue(),
+    file_name=st.session_state["nombre_archivo"],
+    mime="text/plain"
+)
