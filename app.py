@@ -176,10 +176,12 @@ if uploaded_file:
         st.subheader("📄 G-code Generado")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
-        # Mostrar tiempo total
-        minutos, segundos = divmod(total_time, 60)
+        # Mostrar tiempo total en h:m:s
+        horas = int(total_time // 3600)
+        minutos = int((total_time % 3600) // 60)
+        segundos = total_time % 60
         st.subheader("⏱ Tiempo estimado de ejecución")
-        st.write(f"**{int(minutos)} min {segundos:.1f} s** (incluyendo pausas)")
+        st.write(f"**{horas}h {minutos}m {segundos:.1f}s** (incluyendo pausas)")
 
         # Mostrar Preview en Matplotlib
         st.subheader("🖼 Vista Previa de Trayectoria")
@@ -190,11 +192,12 @@ if uploaded_file:
         ax.set_title("Trayectoria Generada")
         st.pyplot(fig)
 
-        # Botón para descargar
+        # Pedir nombre de archivo antes de descargar
+        nombre_archivo = st.text_input("Nombre del archivo para descargar (con extensión .gcode):", "output.gcode")
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button(
             "💾 Descargar G-code",
             data=output.getvalue(),
-            file_name="output.gcode",
+            file_name=nombre_archivo,
             mime="text/plain"
         )
