@@ -6,9 +6,9 @@ import plotly.graph_objects as go
 import os
 
 # ======= Configuración por defecto =======
-CUT_FEED_DEFAULT = 800       # mm/min
-PAUSE_DEFAULT_MS = 500       # ms por mm
-ARC_SEGMENTS_DEFAULT = 40    # resolución fija arcos
+CUT_FEED_DEFAULT = 100       # mm/min
+PAUSE_DEFAULT_MS = 5       # ms por mm
+ARC_SEGMENTS_DEFAULT = 20    # resolución fija arcos
 paths = []
 ordered_paths = []
 
@@ -195,7 +195,7 @@ if uploaded_file:
         st.subheader("🖼 Vista Previa")
         fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
-            fig.add_trace(go.Scatter(x=[x1,x2], y=[y1,y2], mode='lines', line=dict(color='blue', width=0.2)))
+            fig.add_trace(go.Scatter(x=[x1,x2], y=[y1,y2], mode='lines', line=dict(color='blue', width=0.8)))
         fig.update_layout(xaxis=dict(scaleanchor="y", scaleratio=1), height=700, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
