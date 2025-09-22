@@ -91,7 +91,7 @@ def order_paths():
 # ======= Generar G-code =======
 def generar_gcode(cut_feed, pause_ms):
     order_paths()
-    gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}"]
+    gcode_lines = ["G21 ; mm", "G90 ; coordenadas absolutas", f"G1 F{cut_feed}", "M3 ; 🔥 ENCENDER HILO"]
     preview_segments = []
     total_time = 0.0
     current_x, current_y = None, None
