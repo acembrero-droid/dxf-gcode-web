@@ -133,32 +133,45 @@ def generar_gcode(cut_feed, pause_ms):
             if rev:
                 start_angle, end_angle = end_angle, start_angle
 
-            sweep = (end_angle - start_angle) % 360
-            if rev:
-                sweep = -sweep  # si está invertido, giramos en sentido contrario
-
+            # Coordenadas inicial y final
             start_x = cx + r * math.cos(math.radians(start_angle))
             start_y = cy + r * math.sin(math.radians(start_angle))
             end_x = cx + r * math.cos(math.radians(end_angle))
             end_y = cy + r * math.sin(math.radians(end_angle))
 
+            # --- Calcular sentido real usando producto cruzado ---
+            v_start = (start_x - cx, start_y - cy)
+            v_end = (end_x - cx, end_y - cy)
+            cross = v_start[0]*v_end[1] - v_start[1]*v_end[0]
+            ccw = cross > 0  # positivo = CCW
+
+            # Barrido angular (permite >180°)
+            raw_sweep = (end_angle - start_angle) % 360
+            if not ccw:
+                raw_sweep = raw_sweep - 360  # CW → negativo
+
+            if rev:
+                raw_sweep = -raw_sweep
+                ccw = not ccw
+
             if current_x is None or distance((current_x, current_y), (start_x, start_y)) > 0.001:
                 move_to(start_x, start_y, cut_feed)
 
-            ccw = sweep > 0
             i = cx - start_x
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
 
-            arc_length = abs(math.radians(sweep)) * r
+            arc_length = abs(math.radians(raw_sweep)) * r
             total_time += arc_length / (cut_feed/60)
 
-            for k in range(ARC_SEGMENTS_DEFAULT):
-                angle1 = math.radians(start_angle + sweep * (k / ARC_SEGMENTS_DEFAULT))
-                angle2 = math.radians(start_angle + sweep * ((k+1) / ARC_SEGMENTS_DEFAULT))
+            steps = ARC_SEGMENTS_DEFAULT
+            for k in range(steps):
+                angle1 = math.radians(start_angle + raw_sweep * (k / steps))
+                angle2 = math.radians(start_angle + raw_sweep * ((k+1) / steps))
                 x1, y1 = cx + r*math.cos(angle1), cy + r*math.sin(angle1)
                 x2, y2 = cx + r*math.cos(angle2), cy + r*math.sin(angle2)
-                preview_segments.append(((x1, y1),(x2,y2)))
+                preview_segments.append(((x1, y1), (x2, y2)))
+
             current_x, current_y = end_x, end_y
 
         pause_time = (pause_ms/1000)*entity_len
