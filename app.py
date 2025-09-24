@@ -7,7 +7,7 @@ import os
 
 # ======= Configuración por defecto =======
 CUT_FEED_DEFAULT = 100       # mm/min
-PAUSE_DEFAULT_MS = 5       # ms por mm
+PAUSE_DEFAULT_MS = 5         # ms por mm
 ARC_SEGMENTS_DEFAULT = 20    # resolución fija arcos
 paths = []
 ordered_paths = []
@@ -57,8 +57,8 @@ def length_entity(entity):
             l += distance(pts[i], pts[i+1])
         return l
     elif entity["type"] == "arc":
-        angle = math.radians(abs(entity["end_angle"]-entity["start_angle"]))
-        return angle * entity["radius"]
+        sweep = (entity["end_angle"] - entity["start_angle"]) % 360
+        return math.radians(sweep) * entity["radius"]
 
 def order_paths():
     global ordered_paths
@@ -129,22 +129,33 @@ def generar_gcode(cut_feed, pause_ms):
             r = entity["radius"]
             start_angle = entity["start_angle"]
             end_angle = entity["end_angle"]
-            if rev: start_angle, end_angle = end_angle, start_angle
+
+            if rev:
+                start_angle, end_angle = end_angle, start_angle
+
+            sweep = (end_angle - start_angle) % 360
+            if rev:
+                sweep = -sweep  # si está invertido, giramos en sentido contrario
+
             start_x = cx + r * math.cos(math.radians(start_angle))
             start_y = cy + r * math.sin(math.radians(start_angle))
             end_x = cx + r * math.cos(math.radians(end_angle))
             end_y = cy + r * math.sin(math.radians(end_angle))
-            if current_x is None or distance((current_x, current_y), (start_x, start_y))>0.001:
+
+            if current_x is None or distance((current_x, current_y), (start_x, start_y)) > 0.001:
                 move_to(start_x, start_y, cut_feed)
-            ccw = end_angle > start_angle
+
+            ccw = sweep > 0
             i = cx - start_x
             j = cy - start_y
             gcode_lines.append(f"{'G3' if ccw else 'G2'} X{end_x:.3f} Y{end_y:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
-            arc_length = length_entity(entity)
+
+            arc_length = abs(math.radians(sweep)) * r
             total_time += arc_length / (cut_feed/60)
+
             for k in range(ARC_SEGMENTS_DEFAULT):
-                angle1 = math.radians(start_angle + (end_angle-start_angle)*k/ARC_SEGMENTS_DEFAULT)
-                angle2 = math.radians(start_angle + (end_angle-start_angle)*(k+1)/ARC_SEGMENTS_DEFAULT)
+                angle1 = math.radians(start_angle + sweep * (k / ARC_SEGMENTS_DEFAULT))
+                angle2 = math.radians(start_angle + sweep * ((k+1) / ARC_SEGMENTS_DEFAULT))
                 x1, y1 = cx + r*math.cos(angle1), cy + r*math.sin(angle1)
                 x2, y2 = cx + r*math.cos(angle2), cy + r*math.sin(angle2)
                 preview_segments.append(((x1, y1),(x2,y2)))
@@ -166,14 +177,12 @@ if uploaded_file:
         f.write(uploaded_file.getbuffer())
     load_dxf("temp.dxf")
 
-    # Nombre de archivo editable
     base_name = os.path.splitext(uploaded_file.name)[0]+".gcode"
     if "nombre_archivo" not in st.session_state or st.session_state.get("ultimo_dxf")!=uploaded_file.name:
         st.session_state["nombre_archivo"] = base_name
         st.session_state["ultimo_dxf"] = uploaded_file.name
     st.text_input("Nombre del archivo:", key="nombre_archivo")
 
-    # Parámetros de corte
     st.write("### Parámetros de corte")
     col1, col2 = st.columns(2)
     with col1:
@@ -187,11 +196,9 @@ if uploaded_file:
     with col4:
         pause_ms = st.number_input("Pausa exacta (ms)", 0, 2000, pause_ms, 1, key="pause_input")
 
-    # Generar G-code
     if st.button("Generar y Previsualizar G-code"):
         gcode_lines, preview_segments, total_time = generar_gcode(cut_feed, pause_ms)
 
-        # Visualización
         st.subheader("🖼 Vista Previa")
         fig = go.Figure()
         for (x1, y1), (x2, y2) in preview_segments:
@@ -199,18 +206,15 @@ if uploaded_file:
         fig.update_layout(xaxis=dict(scaleanchor="y", scaleratio=1), height=700, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
-        # Tiempo estimado
         horas = int(total_time//3600)
         minutos = int((total_time%3600)//60)
         segundos = round(total_time%60)
         st.subheader("⏱ Tiempo estimado")
         st.write(f"**{horas:02d}:{minutos:02d}:{segundos:02d}** (incluyendo pausas)")
 
-        # Visor G-code
         st.subheader("📄 G-code")
         st.text_area("G-code", "\n".join(gcode_lines), height=300)
 
-        # Descarga
         output = io.StringIO("\n".join(gcode_lines))
         st.download_button("💾 Descargar G-code", data=output.getvalue(),
                            file_name=st.session_state["nombre_archivo"], mime="text/plain")
