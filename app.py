@@ -143,8 +143,6 @@ def build_chains(join_tol):
             break
         chain = []
         curr_key = seed_key
-        prev_dir = None
-
         while True:
             inc = nodemap[curr_key]["inc"]
             cand = [(i, st) for (i, st) in inc if not used[i]]
@@ -185,7 +183,8 @@ def generar_gcode(cut_feed, pause_ms, join_tol):
 
     if chains:
         chain = chains[start_chain_idx]
-        chains[start_chain_idx] = chain[start_seg_idx:] + chain[:start_seg_idx]
+        new_chain = chain[start_seg_idx:] + chain[:start_seg_idx]  # 🚨 abierta, no cerrada
+        chains[start_chain_idx] = new_chain
         if start_chain_idx != 0:
             chains.insert(0, chains.pop(start_chain_idx))
 
