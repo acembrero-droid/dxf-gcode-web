@@ -41,7 +41,6 @@ def add_arc_from_center(p0, p1, center):
     r = dist(p0, center)
     a0 = ang_of(p0, center)
     a1 = ang_of(p1, center)
-    # sentido geométrico: CCW si producto cruzado > 0
     v0 = (p0[0]-cx, p0[1]-cy)
     v1 = (p1[0]-cx, p1[1]-cy)
     ccw = (v0[0]*v1[1] - v0[1]*v1[0]) > 0
@@ -55,22 +54,20 @@ def add_arc_from_center(p0, p1, center):
     })
 
 def add_arc_from_bulge(p0, p1, b):
-    # b = tan(theta/4), theta con signo (CCW positivo)
-    if abs(b) < 1e-12:  # prácticamente línea
+    if abs(b) < 1e-12:
         add_line(p0, p1); return
     x0,y0 = p0; x1,y1 = p1
     chord = (x1-x0, y1-y0)
     c = math.hypot(chord[0], chord[1])
     if c < 1e-12:
         return
-    theta = 4.0*math.atan(b)               # radianes, con signo
+    theta = 4.0*math.atan(b)
     sin_half = math.sin(theta/2.0)
     if abs(sin_half) < 1e-12:
         add_line(p0, p1); return
     R = c/(2.0*abs(sin_half))
     mid = ((x0+x1)/2.0, (y0+y1)/2.0)
-    n = rot90_ccw(unit(chord))             # normal CCW a la cuerda
-    # distancia del centro al punto medio (con signo por bulge)
+    n = rot90_ccw(unit(chord))
     d = R*math.cos(theta/2.0)
     d = d if b > 0 else -d
     center = (mid[0] + n[0]*d, mid[1] + n[1]*d)
@@ -95,11 +92,9 @@ def load_dxf(file):
             p1 = (c[0] + r*math.cos(rad(a1)), c[1] + r*math.sin(rad(a1)))
             add_arc_from_center(p0, p1, c)
         elif dxft == "LWPOLYLINE":
-            # incluimos ARCO por bulge
             try:
-                pts = list(e.get_points("xyb"))  # [(x,y,bulge), ...]
+                pts = list(e.get_points("xyb"))
             except TypeError:
-                # versiones antiguas: extrae manualmente
                 pts = [(p[0], p[1], p[4] if len(p) > 4 else 0.0) for p in e.get_points()]
             for i in range(len(pts)-1):
                 p0 = (pts[i][0],   pts[i][1])
@@ -114,8 +109,6 @@ def load_dxf(file):
 
 # ======= Construir cadenas continuas (topología) =======
 def build_chains(join_tol):
-    """Crea cadenas continuas de segmentos (índice, reverse=False/True)"""
-    # mapa de nodos -> segmentos incidentes
     nodemap = {}
     def register_endpoint(idx, pt, is_start):
         k = point_key(pt, join_tol)
@@ -129,13 +122,11 @@ def build_chains(join_tol):
     used = [False]*len(paths)
     result = []
 
-    # función para buscar un nodo con grado impar (bueno para cadenas abiertas)
     def find_seed():
         for k, nd in nodemap.items():
             avail = [(i, st) for (i, st) in nd["inc"] if not used[i]]
             if len(avail) == 1:
                 return k
-        # si no hay abiertos, toma cualquiera con segmentos libres
         for k, nd in nodemap.items():
             for (i, st) in nd["inc"]:
                 if not used[i]:
@@ -155,75 +146,48 @@ def build_chains(join_tol):
         prev_dir = None
 
         while True:
-            # candidatos libres en el nodo actual
             inc = nodemap[curr_key]["inc"]
             cand = [(i, st) for (i, st) in inc if not used[i]]
             if not cand:
                 break
-
-            # si hay varios, elige el que mejor alinee con prev_dir
-            best = cand[0]
-            if prev_dir is not None and len(cand) > 1:
-                best_score = None
-                for (i, st) in cand:
-                    tang = tangent_at_endpoint(paths[i], at_start=st)
-                    # si vamos desde el nodo, y el segmento se usará saliendo de él:
-                    # si at_start=True -> dirección natural ya parte del start;
-                    # si at_start=False -> dirección invertida.
-                    if not st:
-                        tang = (-tang[0], -tang[1])
-                    # ángulo pequeño => mejor
-                    dot = tang[0]*prev_dir[0] + tang[1]*prev_dir[1]
-                    score = -dot  # mínimo
-                    if best_score is None or score < best_score:
-                        best_score = score
-                        best = (i, st)
-
-            seg_idx, at_start = best
+            seg_idx, at_start = cand[0]
             used[seg_idx] = True
-            reverse = (not at_start)  # si estamos en el "end", hay que recorrer invertido
+            reverse = (not at_start)
             chain.append((seg_idx, reverse))
-
-            # actualizar prev_dir y avanzar al siguiente nodo
             seg = paths[seg_idx]
-            # vector de avance real:
-            v = travel_vector(seg, reverse)
-            prev_dir = unit(v)
             nxt_pt = other_endpoint(seg_idx, at_start)
             curr_key = point_key(nxt_pt, join_tol)
-
         if chain:
             result.append(chain)
 
     return result
 
-def tangent_at_endpoint(seg, at_start=True):
-    """Vector tangente (no normalizado) del segmento en ese extremo,
-       apuntando en el sentido natural start->end."""
-    if seg["type"] == "line":
-        v = (seg["end"][0]-seg["start"][0], seg["end"][1]-seg["start"][1])
-        return v if at_start else v  # misma tangente
-    else:  # arc
-        c = seg["center"]
-        p = seg["start"] if at_start else seg["end"]
-        rvec = (p[0]-c[0], p[1]-c[1])
-        t = rot90_ccw(rvec) if seg["ccw"] else (-rot90_ccw(rvec)[0], -rot90_ccw(rvec)[1])
-        return t
-
-def travel_vector(seg, reverse=False):
-    if seg["type"] == "line":
-        v = (seg["end"][0]-seg["start"][0], seg["end"][1]-seg["start"][1])
-        return v if not reverse else (-v[0], -v[1])
-    else:  # arc
-        # tangente en el punto de salida
-        at_start = not reverse
-        t = tangent_at_endpoint(seg, at_start=at_start)
-        return t if not reverse else (-t[0], -t[1])
-
 # ======= Generar G-code continuo =======
 def generar_gcode(cut_feed, pause_ms, join_tol):
     global chains
     chains = build_chains(join_tol)
+
+    # === Forzar inicio en el punto más a la izquierda ===
+    min_x = float("inf")
+    start_chain_idx = 0
+    start_seg_idx = 0
+    start_reverse = False
+
+    for ci, chain in enumerate(chains):
+        for si, (seg_idx, reverse) in enumerate(chain):
+            seg = paths[seg_idx]
+            p0 = seg["end"] if reverse else seg["start"]
+            if p0[0] < min_x:
+                min_x = p0[0]
+                start_chain_idx = ci
+                start_seg_idx = si
+                start_reverse = reverse
+
+    if chains:
+        chain = chains[start_chain_idx]
+        chains[start_chain_idx] = chain[start_seg_idx:] + chain[:start_seg_idx]
+        if start_chain_idx != 0:
+            chains.insert(0, chains.pop(start_chain_idx))
 
     gcode_lines = [
         "G21 ; mm",
@@ -247,41 +211,31 @@ def generar_gcode(cut_feed, pause_ms, join_tol):
     for chain in chains:
         for seg_idx, reverse in chain:
             s = paths[seg_idx]
-
             if s["type"] == "line":
                 p0 = s["end"] if reverse else s["start"]
                 p1 = s["start"] if reverse else s["end"]
                 if current_x is None or dist((current_x,current_y), p0) > 1e-6:
                     move_to(p0[0], p0[1], cut_feed)
                 move_to(p1[0], p1[1], cut_feed)
-
-                # pausa por longitud
                 L = dist(p0,p1)
                 pause_t = (pause_ms/1000.0)*L
                 gcode_lines.append(f"G4 P{pause_t:.3f} ; pausa")
                 total_time += pause_t
-
-            else:  # ARC
+            else:
                 cx, cy = s["center"]
                 r = s["radius"]
                 a0 = s["end_angle"] if reverse else s["start_angle"]
                 a1 = s["start_angle"] if reverse else s["end_angle"]
-                ccw_eff = (not reverse) == s["ccw"]  # invierte sentido si reverse
-
+                ccw_eff = (not reverse) == s["ccw"]
                 start = (cx + r*math.cos(rad(a0)), cy + r*math.sin(rad(a0)))
                 end   = (cx + r*math.cos(rad(a1)), cy + r*math.sin(rad(a1)))
-
                 if current_x is None or dist((current_x,current_y), start) > 1e-6:
                     move_to(start[0], start[1], cut_feed)
-
                 i = cx - start[0]; j = cy - start[1]
                 gcode_lines.append(f"{'G3' if ccw_eff else 'G2'} X{end[0]:.3f} Y{end[1]:.3f} I{i:.3f} J{j:.3f} F{cut_feed}")
-
-                # longitud y preview
                 sweep_deg = signed_sweep_deg(a0, a1, ccw_eff)
                 L = abs(rad(sweep_deg))*r
                 total_time += L / (cut_feed/60.0)
-
                 steps = max(8, int(ARC_SEGMENTS_DEFAULT*abs(sweep_deg)/180.0))
                 for k in range(steps):
                     t1 = rad(a0 + sweep_deg*(k/steps))
@@ -289,9 +243,7 @@ def generar_gcode(cut_feed, pause_ms, join_tol):
                     x1,y1 = cx + r*math.cos(t1), cy + r*math.sin(t1)
                     x2,y2 = cx + r*math.cos(t2), cy + r*math.sin(t2)
                     preview_segments.append(((x1,y1),(x2,y2)))
-
                 current_x, current_y = end
-
                 pause_t = (pause_ms/1000.0)*L
                 gcode_lines.append(f"G4 P{pause_t:.3f} ; pausa")
                 total_time += pause_t
